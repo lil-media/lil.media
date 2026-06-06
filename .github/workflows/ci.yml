@@ -28,6 +28,36 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # Opt-in E2E (Playwright + Clerk). Enable by setting Actions variable
+  # RUN_E2E=true and adding the preview environment's dev Clerk keys:
+  #   variable VITE_CLERK_PUBLISHABLE_KEY (pk_test_…) + secret CLERK_SECRET_KEY (sk_test_…).
+  # Uses +clerk_test users, so it never touches real accounts.
+  e2e:
+    name: E2E (Playwright + Clerk)
+    needs: verify
+    if: vars.RUN_E2E == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: preview
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web cf-typegen
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      # Mirror local .dev.vars so the dev server + test runner get the dev keys.
+      - run: |
+          printf 'VITE_CLERK_PUBLISHABLE_KEY=%s\nCLERK_SECRET_KEY=%s\n' \
+            "${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}" "${{ secrets.CLERK_SECRET_KEY }}" \
+            > apps/web/.dev.vars
+      - run: pnpm --filter web test:e2e
+        env:
+          CI: "true"
+
   # main -> preview/staging Worker (lil-media-web-preview), Clerk DEV keys.
   # CLOUDFLARE_ENV=preview makes the Cloudflare Vite plugin bake the preview
   # Worker name + preview D1 into the build output.
