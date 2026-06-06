@@ -54,6 +54,9 @@ jobs:
           printf 'VITE_CLERK_PUBLISHABLE_KEY=%s\nCLERK_SECRET_KEY=%s\n' \
             "${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}" "${{ secrets.CLERK_SECRET_KEY }}" \
             > apps/web/.dev.vars
+      # The dev server uses a local (miniflare) D1 — migrate it so SSR doesn't
+      # 500 on an empty database and the webServer becomes ready.
+      - run: pnpm --filter web exec wrangler d1 migrations apply lil-media --local
       - run: pnpm --filter web test:e2e
         env:
           CI: "true"
