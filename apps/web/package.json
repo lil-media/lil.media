@@ -36,6 +36,7 @@
     "tailwindcss": "^4"
   },
   "devDependencies": {
+    "@clerk/backend": "^3.5.0",
     "@clerk/testing": "^2.0.35",
     "@cloudflare/vite-plugin": "^1.40.0",
     "@cloudflare/vitest-pool-workers": "^0.16.13",

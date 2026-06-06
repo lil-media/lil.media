@@ -3,6 +3,8 @@ import path from "node:path"
 
 import { defineConfig, devices } from "@playwright/test"
 
+import { STORAGE_STATE } from "./e2e/test-user"
+
 // Locally, load Clerk keys from .dev.vars (gitignored) so the test runner can
 // mint a testing token. In CI these come from the job environment instead.
 // @clerk/testing's clerkSetup() reads CLERK_PUBLISHABLE_KEY / CLERK_SECRET_KEY.
@@ -35,7 +37,22 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /global\.setup\.ts/ },
     {
-      name: "chromium",
+      name: "auth",
+      testMatch: /auth\.setup\.ts/,
+      dependencies: ["setup"],
+    },
+    // Feature tests reuse the dedicated user's persisted session.
+    {
+      name: "authed",
+      testMatch: /.*\.spec\.ts/,
+      testIgnore: /signup\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+      dependencies: ["auth"],
+    },
+    // The sign-up UI smoke runs unauthenticated (fresh user, no storageState).
+    {
+      name: "signup",
+      testMatch: /signup\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
       dependencies: ["setup"],
     },
