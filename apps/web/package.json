@@ -7,6 +7,8 @@
     "dev": "vite dev --port 3000",
     "build": "vite build",
     "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "cf-typegen": "wrangler types",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit"
@@ -25,6 +27,7 @@
     "tailwindcss": "^4"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.40.0",
     "@tanstack/devtools-vite": "latest",
     "@tanstack/eslint-config": "latest",
     "@types/node": "^22",
@@ -33,6 +36,7 @@
     "@vitejs/plugin-react": "^6",
     "eslint": "^9",
     "typescript": "^6",
-    "vite": "^8"
+    "vite": "^8",
+    "wrangler": "^4.98.0"
   }
 }
