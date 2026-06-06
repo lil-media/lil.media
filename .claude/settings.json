@@ -1,5 +1,15 @@
 {
   "enabledPlugins": {
     "playwright@claude-plugins-official": true
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.dev.vars)",
+      "Read(**/.dev.vars.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
+    ]
   }
 }
