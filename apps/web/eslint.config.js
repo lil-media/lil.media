@@ -15,6 +15,13 @@ export default [
     },
   },
   {
-    ignores: ["eslint.config.js", ".prettierrc"],
+    ignores: [
+      "eslint.config.js",
+      ".prettierrc",
+      // generated files
+      "worker-configuration.d.ts",
+      "src/routeTree.gen.ts",
+      "drizzle/**",
+    ],
   },
 ]

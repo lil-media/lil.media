@@ -1,7 +1,17 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lil-media-web",
-  "compatibility_date": "2026-06-03",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry"
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "lil-media-web",
+	"compatibility_date": "2026-06-03",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "@tanstack/react-start/server-entry",
+	"d1_databases": [
+		{
+			"binding": "lil_media",
+			"database_name": "lil-media",
+			"database_id": "92652712-7ea9-4484-99d9-e005b1057b40",
+			"migrations_dir": "drizzle"
+		}
+	]
 }
