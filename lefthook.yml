@@ -1,0 +1,15 @@
+# https://lefthook.dev
+# Pre-commit stays fast: format staged files only. Heavier gates
+# (lint, typecheck, test) run in CI via turbo.
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,css,md,yml,yaml}"
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}

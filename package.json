@@ -9,9 +9,13 @@
     "test": "turbo test",
     "format": "turbo format",
     "typecheck": "turbo typecheck",
-    "doctor": "npx react-doctor@latest"
+    "doctor": "npx react-doctor@latest",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "lefthook": "^2.1.9",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.9.15",
@@ -24,6 +28,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
+      "lefthook",
       "lightningcss",
       "workerd"
     ]
