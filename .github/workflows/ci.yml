@@ -4,9 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,12 +28,18 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  deploy:
-    name: Deploy to Cloudflare Workers
+  # main -> preview/staging Worker (lil-media-web-preview), Clerk DEV keys.
+  # CLOUDFLARE_ENV=preview makes the Cloudflare Vite plugin bake the preview
+  # Worker name + preview D1 into the build output.
+  deploy-preview:
+    name: Deploy preview (staging)
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: preview
+    env:
+      CLOUDFLARE_ENV: preview
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
@@ -42,9 +49,53 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter web cf-typegen
+      # Publishable key (DEV) is public; baked into the client bundle at build.
+      - run: echo "VITE_CLERK_PUBLISHABLE_KEY=${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}" > apps/web/.env
       - run: pnpm --filter web build
-      # Requires repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
-      - uses: cloudflare/wrangler-action@v3
+      - name: Apply preview D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: d1 migrations apply lil-media-preview --remote
+      - name: Deploy preview Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: deploy
+
+  # Manual only — production Worker (lil-media-web), Clerk PROD keys + real
+  # domain. Trigger from the Actions tab when you're ready to ship.
+  deploy-production:
+    name: Deploy production
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web cf-typegen
+      - run: echo "VITE_CLERK_PUBLISHABLE_KEY=${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}" > apps/web/.env
+      - run: pnpm --filter web build
+      - name: Apply production D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: d1 migrations apply lil-media --remote
+      - name: Deploy production Worker
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
