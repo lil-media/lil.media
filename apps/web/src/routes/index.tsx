@@ -1,6 +1,7 @@
 import { SignInButton, UserButton } from "@clerk/tanstack-react-start"
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { Button } from "@workspace/ui/components/button"
+import { LilWordmark } from "@workspace/ui/components/logo"
 import { useState } from "react"
 
 import {
@@ -24,7 +25,7 @@ function Home() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">lil.media</h1>
+        <LilWordmark aria-label="lil media" className="h-6 w-auto" />
         {viewer.signedIn ? (
           <UserButton />
         ) : (
