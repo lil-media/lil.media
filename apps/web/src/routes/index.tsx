@@ -2,7 +2,7 @@ import { SignInButton, UserButton } from "@clerk/tanstack-react-start"
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { Button } from "@workspace/ui/components/button"
 import { LilWordmark } from "@workspace/ui/components/logo"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import {
   createPostFn,
@@ -104,16 +104,23 @@ function ProfileForm() {
 function Composer() {
   const router = useRouter()
   const [content, setContent] = useState("")
+  const [image, setImage] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     setPending(true)
     try {
-      await createPostFn({ data: { content } })
+      const formData = new FormData()
+      formData.set("content", content)
+      if (image) formData.set("image", image)
+      await createPostFn({ data: formData })
       setContent("")
+      setImage(null)
+      if (fileInputRef.current) fileInputRef.current.value = ""
       await router.invalidate()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.")
@@ -133,11 +140,18 @@ function Composer() {
         onChange={(e) => setContent(e.target.value)}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+          className="max-w-[60%] text-xs text-muted-foreground file:mr-2 file:rounded-md file:border file:border-border file:bg-transparent file:px-2 file:py-1 file:text-xs"
+        />
         <Button
           type="submit"
           size="sm"
-          disabled={pending || content.trim().length === 0}
+          disabled={pending || (content.trim().length === 0 && !image)}
         >
           {pending ? "Posting…" : "Post"}
         </Button>
@@ -165,7 +179,17 @@ function Feed({ posts }: { posts: Awaited<ReturnType<typeof getFeedFn>> }) {
               @{post.authorHandle ?? "unknown"}
             </span>
           </div>
-          <p className="mt-1 text-sm whitespace-pre-wrap">{post.content}</p>
+          {post.content ? (
+            <p className="mt-1 text-sm whitespace-pre-wrap">{post.content}</p>
+          ) : null}
+          {post.mediaKey ? (
+            <img
+              src={`/media/${post.mediaKey}`}
+              alt=""
+              loading="lazy"
+              className="mt-2 max-h-96 w-full rounded-md border border-border object-cover"
+            />
+          ) : null}
         </li>
       ))}
     </ul>

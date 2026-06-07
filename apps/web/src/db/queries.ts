@@ -35,7 +35,12 @@ export async function upsertProfile(
 
 export async function createPost(
   db: Db,
-  input: { authorId: string; content: string }
+  input: {
+    authorId: string
+    content: string
+    mediaKey?: string
+    mediaType?: string
+  }
 ) {
   const [post] = await db.insert(posts).values(input).returning()
   return post
@@ -46,6 +51,8 @@ export async function listRecentPosts(db: Db, limit = 50) {
     .select({
       id: posts.id,
       content: posts.content,
+      mediaKey: posts.mediaKey,
+      mediaType: posts.mediaType,
       createdAt: posts.createdAt,
       authorId: posts.authorId,
       authorHandle: profiles.handle,

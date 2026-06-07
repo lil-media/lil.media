@@ -14,9 +14,15 @@
 			"migrations_dir": "drizzle"
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "MEDIA",
+			"bucket_name": "lil-media-uploads"
+		}
+	],
 	// Preview/staging environment (deployed from `main`, uses Clerk DEV keys).
-	// Bindings are non-inheritable, so the D1 binding is redefined here against
-	// a separate preview database.
+	// Bindings are non-inheritable, so D1/R2 are redefined here against the
+	// separate preview resources.
 	"env": {
 		"preview": {
 			"name": "lil-media-web-preview",
@@ -26,6 +32,12 @@
 					"database_name": "lil-media-preview",
 					"database_id": "2cb79438-3487-41b8-90ab-9e2a17c4ef00",
 					"migrations_dir": "drizzle"
+				}
+			],
+			"r2_buckets": [
+				{
+					"binding": "MEDIA",
+					"bucket_name": "lil-media-uploads-preview"
 				}
 			]
 		}

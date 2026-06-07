@@ -31,6 +31,9 @@ export const posts = sqliteTable("posts", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
+  // R2 object key + content type for an optional attached image.
+  mediaKey: text("media_key"),
+  mediaType: text("media_type"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

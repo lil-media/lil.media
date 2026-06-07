@@ -58,16 +58,58 @@ export const saveProfileFn = createServerFn({ method: "POST" })
     })
   })
 
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+])
+
 export const createPostFn = createServerFn({ method: "POST" })
-  .inputValidator((data: { content: string }) => {
-    const content = data.content.trim()
-    if (content.length < 1 || content.length > 500) {
-      throw new Error("Posts must be 1–500 characters.")
+  .inputValidator((data: unknown) => {
+    if (!(data instanceof FormData)) {
+      throw new Error("Expected form data.")
     }
-    return { content }
+    const content = (data.get("content")?.toString() ?? "").trim()
+    const file = data.get("image")
+    const image = file instanceof File && file.size > 0 ? file : null
+
+    if (!content && !image) {
+      throw new Error("Write something or attach an image.")
+    }
+    if (content.length > 500) {
+      throw new Error("Posts must be 500 characters or fewer.")
+    }
+    if (image) {
+      if (!ALLOWED_IMAGE_TYPES.has(image.type)) {
+        throw new Error("Images must be JPEG, PNG, WebP, or GIF.")
+      }
+      if (image.size > MAX_IMAGE_BYTES) {
+        throw new Error("Images must be 8MB or smaller.")
+      }
+    }
+    return { content, image }
   })
   .handler(async ({ data }) => {
     const { isAuthenticated, userId } = await auth()
     if (!isAuthenticated) throw new Error("You must be signed in.")
-    return createPost(db(), { authorId: userId, content: data.content })
+
+    let mediaKey: string | undefined
+    let mediaType: string | undefined
+    if (data.image) {
+      const ext = data.image.type.split("/")[1] ?? "bin"
+      mediaKey = `${crypto.randomUUID()}.${ext}`
+      mediaType = data.image.type
+      await env.MEDIA.put(mediaKey, await data.image.arrayBuffer(), {
+        httpMetadata: { contentType: data.image.type },
+      })
+    }
+
+    return createPost(db(), {
+      authorId: userId,
+      content: data.content,
+      mediaKey,
+      mediaType,
+    })
   })
