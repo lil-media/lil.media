@@ -20,6 +20,12 @@
 			"bucket_name": "lil-media-uploads"
 		}
 	],
+	// Non-secret config for presigning R2 upload URLs (the S3 access key/secret
+	// are Worker secrets: R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY).
+	"vars": {
+		"R2_ACCOUNT_ID": "730fae67d3ea299818611c2b1b691bf9",
+		"R2_BUCKET": "lil-media-uploads"
+	},
 	// Preview/staging environment (deployed from `main`, uses Clerk DEV keys).
 	// Bindings are non-inheritable, so D1/R2 are redefined here against the
 	// separate preview resources.
@@ -39,7 +45,11 @@
 					"binding": "MEDIA",
 					"bucket_name": "lil-media-uploads-preview"
 				}
-			]
+			],
+			"vars": {
+				"R2_ACCOUNT_ID": "730fae67d3ea299818611c2b1b691bf9",
+				"R2_BUCKET": "lil-media-uploads-preview"
+			}
 		}
 	}
 }

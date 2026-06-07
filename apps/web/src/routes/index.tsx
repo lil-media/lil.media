@@ -8,6 +8,7 @@ import {
   createPostFn,
   getFeedFn,
   getViewerFn,
+  requestUploadUrlFn,
   saveProfileFn,
 } from "@/server/feed"
 
@@ -114,10 +115,20 @@ function Composer() {
     setError(null)
     setPending(true)
     try {
-      const formData = new FormData()
-      formData.set("content", content)
-      if (image) formData.set("image", image)
-      await createPostFn({ data: formData })
+      let mediaKey: string | undefined
+      if (image) {
+        const { key, uploadUrl } = await requestUploadUrlFn({
+          data: { contentType: image.type },
+        })
+        const res = await fetch(uploadUrl, {
+          method: "PUT",
+          body: image,
+          headers: { "content-type": image.type },
+        })
+        if (!res.ok) throw new Error("Image upload failed. Please try again.")
+        mediaKey = key
+      }
+      await createPostFn({ data: { content, mediaKey } })
       setContent("")
       setImage(null)
       if (fileInputRef.current) fileInputRef.current.value = ""

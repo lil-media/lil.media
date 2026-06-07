@@ -4,3 +4,10 @@
 #
 # In production set this with: `wrangler secret put CLERK_SECRET_KEY`
 CLERK_SECRET_KEY=
+
+# R2 S3 API token (Cloudflare dashboard -> R2 -> Manage R2 API Tokens ->
+# Object Read & Write) for presigning direct image uploads. Per environment:
+#   wrangler secret put R2_ACCESS_KEY_ID --env preview
+#   wrangler secret put R2_SECRET_ACCESS_KEY --env preview
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
