@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import { createDb } from "./index"
 import {
+  HandleTakenError,
   createPost,
   listRecentPosts,
   upsertProfile,
@@ -56,6 +57,30 @@ describe("post queries (D1)", () => {
       mediaKey: "abc123.jpg",
       mediaType: "image/jpeg",
     })
+  })
+
+  it("cannot create a post for an author with no user/profile row", async () => {
+    await expect(
+      createPost(db, { authorId: "ghost_user", content: "hi" })
+    ).rejects.toThrow()
+  })
+
+  it("rejects a handle already taken by another user", async () => {
+    await upsertUser(db, { id: "user_taken_a", email: "a@example.com" })
+    await upsertProfile(db, {
+      userId: "user_taken_a",
+      handle: "popular",
+      displayName: "A",
+    })
+
+    await upsertUser(db, { id: "user_taken_b", email: "b@example.com" })
+    await expect(
+      upsertProfile(db, {
+        userId: "user_taken_b",
+        handle: "popular",
+        displayName: "B",
+      })
+    ).rejects.toBeInstanceOf(HandleTakenError)
   })
 
   it("upsertProfile updates an existing profile rather than duplicating", async () => {
