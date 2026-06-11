@@ -1,12 +1,10 @@
 import { AwsClient } from "aws4fetch"
 import { env } from "cloudflare:workers"
 
-export const ALLOWED_IMAGE_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-])
+import { SERVE_IMAGE_TYPES } from "./media"
+
+// One allowlist for both uploading and serving (see ./media).
+export const ALLOWED_IMAGE_TYPES = SERVE_IMAGE_TYPES
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 function s3Client() {

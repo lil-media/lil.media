@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { env } from "cloudflare:workers"
 
-// Serves uploaded images from R2. Keys are opaque (uuid.ext), and objects are
-// immutable, so they can be cached aggressively.
+import { mediaResponseHeaders } from "@/server/media"
+
+// Serves uploaded images from R2. The stored content type is untrusted, so the
+// response is restricted to allowlisted image types (see mediaResponseHeaders);
+// anything else downloads as an opaque attachment.
 export const Route = createFileRoute("/media/$key")({
   server: {
     handlers: {
@@ -12,12 +15,10 @@ export const Route = createFileRoute("/media/$key")({
           return new Response("Not found", { status: 404 })
         }
         return new Response(object.body, {
-          headers: {
-            "Content-Type":
-              object.httpMetadata?.contentType ?? "application/octet-stream",
-            "Cache-Control": "public, max-age=31536000, immutable",
-            ETag: object.httpEtag,
-          },
+          headers: mediaResponseHeaders(
+            object.httpMetadata?.contentType,
+            object.httpEtag
+          ),
         })
       },
     },
