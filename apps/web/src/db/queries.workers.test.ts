@@ -59,6 +59,12 @@ describe("post queries (D1)", () => {
     })
   })
 
+  it("cannot create a post for an author with no user/profile row", async () => {
+    await expect(
+      createPost(db, { authorId: "ghost_user", content: "hi" })
+    ).rejects.toThrow()
+  })
+
   it("rejects a handle already taken by another user", async () => {
     await upsertUser(db, { id: "user_taken_a", email: "a@example.com" })
     await upsertProfile(db, {

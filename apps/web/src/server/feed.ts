@@ -91,12 +91,16 @@ export const createPostFn = createServerFn({ method: "POST" })
     const { isAuthenticated, userId } = await auth()
     if (!isAuthenticated) throw new Error("You must be signed in.")
 
+    const d = db()
+    const profile = await getProfile(d, userId)
+    if (!profile) throw new Error("Create your profile first.")
+
     let mediaType: string | undefined
     if (data.mediaKey) {
       mediaType = (await verifyUpload(data.mediaKey)).contentType
     }
 
-    return createPost(db(), {
+    return createPost(d, {
       authorId: userId,
       content: data.content,
       mediaKey: data.mediaKey,
