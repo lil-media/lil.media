@@ -10,7 +10,7 @@ import {
   upsertProfile,
   upsertUser,
 } from "@/db/queries"
-import { ALLOWED_IMAGE_TYPES, presignUpload, verifyUpload } from "./storage"
+import { ALLOWED_IMAGE_TYPES, presignUpload, verifyAndPromote } from "./storage"
 import { validatePostInput, validateProfileInput } from "./validation"
 
 function db() {
@@ -78,15 +78,18 @@ export const createPostFn = createServerFn({ method: "POST" })
     const profile = await getProfile(d, userId)
     if (!profile) throw new Error("Create your profile first.")
 
+    let mediaKey: string | undefined
     let mediaType: string | undefined
     if (data.mediaKey) {
-      mediaType = (await verifyUpload(data.mediaKey)).contentType
+      const promoted = await verifyAndPromote(env.MEDIA, data.mediaKey)
+      mediaKey = promoted.key
+      mediaType = promoted.contentType
     }
 
     return createPost(d, {
       authorId: userId,
       content: data.content,
-      mediaKey: data.mediaKey,
+      mediaKey,
       mediaType,
     })
   })
