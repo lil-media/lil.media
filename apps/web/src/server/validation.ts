@@ -22,6 +22,9 @@ export function validatePostInput(data: {
 }): PostInput {
   const content = data.content.trim()
   const mediaKey = data.mediaKey?.trim() || undefined
+  if (mediaKey && !/^pending\/[0-9a-fA-F-]{36}\.[a-z0-9]+$/.test(mediaKey)) {
+    throw new Error("Invalid upload reference.")
+  }
   if (!content && !mediaKey) {
     throw new Error("Write something or attach an image.")
   }

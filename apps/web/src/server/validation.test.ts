@@ -43,9 +43,10 @@ describe("validatePostInput", () => {
   })
 
   it("accepts an image-only post (no text) with a media key", () => {
-    expect(validatePostInput({ content: "   ", mediaKey: "abc.png" })).toEqual({
+    const key = "pending/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png"
+    expect(validatePostInput({ content: "   ", mediaKey: key })).toEqual({
       content: "",
-      mediaKey: "abc.png",
+      mediaKey: key,
     })
   })
 
@@ -59,5 +60,19 @@ describe("validatePostInput", () => {
     expect(() => validatePostInput({ content: "x".repeat(501) })).toThrow(
       "Posts must be 500 characters or fewer."
     )
+  })
+
+  it("accepts a well-formed pending media key", () => {
+    const key = "pending/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png"
+    expect(validatePostInput({ content: "", mediaKey: key })).toEqual({
+      content: "",
+      mediaKey: key,
+    })
+  })
+
+  it("rejects a malformed media key", () => {
+    expect(() =>
+      validatePostInput({ content: "hi", mediaKey: "../secret.png" })
+    ).toThrow("Invalid upload reference.")
   })
 })
