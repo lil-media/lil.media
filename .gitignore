@@ -26,4 +26,5 @@ worker-configuration.d.ts
 test-results
 playwright-report
 .playwright
+.playwright-mcp
 **/playwright/.clerk/
