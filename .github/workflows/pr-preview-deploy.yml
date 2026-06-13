@@ -1,0 +1,242 @@
+# Per-PR preview deployment.
+#
+# Each PR gets its own ephemeral Cloudflare Worker (lil-media-web-pr-<N>) with
+# an ISOLATED D1 database (lil-media-pr-<N>) so schema/data from one PR can't
+# muddy another. R2 is intentionally shared (the preview bucket): object keys
+# are random UUIDs and the feed is driven by the isolated D1, so there's nothing
+# to collide. Status is reported via a single self-updating PR comment, and the
+# whole environment is destroyed by pr-preview-teardown.yml when the PR closes.
+#
+# Hardening choices:
+#   * Triggered by `pull_request` (NOT pull_request_target) and the deploy job
+#     only runs for same-repo branches, so deploy secrets are never exposed to
+#     untrusted fork code. Fork PRs simply get no preview.
+#   * GITHUB_TOKEN defaults to no permissions; each job is granted the minimum.
+#   * Every third-party / first-party action is pinned to a full commit SHA
+#     (Dependabot keeps them current — see .github/dependabot.yml).
+#   * PR-controlled strings (title, branch, body) are never interpolated into a
+#     shell or script; resource names derive only from the integer PR number.
+#   * All Wrangler mutations are scoped to the PR worker / PR database by name,
+#     so production (lil-media-web / lil-media) can never be touched.
+
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# A new push to the PR supersedes any in-flight preview build. Teardown uses a
+# separate group (see pr-preview-teardown.yml) so a close can't be cancelled by
+# a build, or vice-versa.
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Least privilege: nothing by default, granted per-job below.
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy preview
+    # Same-repo branches only. Fork PRs don't have access to the deploy secrets
+    # (and we never want untrusted code to), so they get no preview.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Reuse the `preview` environment so the Cloudflare + Clerk + R2 secrets that
+    # already power staging are available here too (the E2E job proves PR
+    # branches may use it).
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read # checkout
+      pull-requests: write # sticky status comment
+    env:
+      # Clerk DEV publishable key is public and baked into the client bundle.
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      # Wrangler reads these from the environment for every command below.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Select the `preview` Wrangler environment for the WHOLE job — exactly as
+      # ci.yml's deploy-preview does. This is what makes both `wrangler deploy`
+      # and `wrangler d1 migrations apply` resolve env.preview (which the patch
+      # step rewrites to this PR's worker + isolated D1) instead of the
+      # top-level production config. The Vite build also reads it to bake the
+      # right bindings. The earlier d1 info/create steps resolve by name via the
+      # account API, so a selected env doesn't affect them.
+      CLOUDFLARE_ENV: preview
+      # workers.dev subdomain for this account; used to construct the preview URL
+      # if it can't be parsed from the deploy output.
+      WORKERS_DEV_SUBDOMAIN: adam-730
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
+
+      # Derive every resource name from the integer PR number only — no
+      # PR-controlled strings reach the shell.
+      - name: Resolve preview identifiers
+        run: |
+          set -euo pipefail
+          pr="${{ github.event.pull_request.number }}"
+          {
+            echo "PR_NUMBER=${pr}"
+            echo "PR_WORKER_NAME=lil-media-web-pr-${pr}"
+            echo "PR_DB_NAME=lil-media-pr-${pr}"
+          } >> "$GITHUB_ENV"
+
+      # Post an early "building" status so the PR shows activity immediately.
+      - name: Comment — building
+        uses: ./.github/actions/preview-comment
+        with:
+          body: |
+            ### ⏳ Preview deploying…
+
+            Building an isolated preview for commit `${{ github.event.pull_request.head.sha }}`.
+            This comment will update when it's ready.
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.1.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web cf-typegen
+
+      # Create (or reuse, on re-run) the PR's own D1 database and capture its id.
+      - name: Provision isolated D1 database
+        run: |
+          set -euo pipefail
+          get_id() {
+            pnpm --filter web exec wrangler d1 info "$PR_DB_NAME" --json 2>/dev/null \
+              | jq -r '.uuid // .database_id // empty'
+          }
+          db_id="$(get_id || true)"
+          if [ -z "$db_id" ]; then
+            echo "Creating D1 database $PR_DB_NAME…"
+            pnpm --filter web exec wrangler d1 create "$PR_DB_NAME" || true
+            db_id="$(get_id || true)"
+          else
+            echo "Reusing existing D1 database $PR_DB_NAME ($db_id)."
+          fi
+          if [ -z "$db_id" ]; then
+            echo "::error::Could not resolve a D1 database id for $PR_DB_NAME"
+            exit 1
+          fi
+          echo "PR_DB_ID=${db_id}" >> "$GITHUB_ENV"
+
+      # Point the `preview` env at the PR worker name + isolated D1 (R2 stays the
+      # shared preview bucket). Patches the runner's throwaway checkout only.
+      - name: Patch Wrangler config for this PR
+        run: node scripts/preview/patch-wrangler-config.mjs
+
+      - name: Apply migrations to the PR database
+        run: pnpm --filter web exec wrangler d1 migrations apply "$PR_DB_NAME" --remote
+
+      - name: Write build-time client env
+        run: printf 'VITE_CLERK_PUBLISHABLE_KEY=%s\n' "$VITE_CLERK_PUBLISHABLE_KEY" > apps/web/.env
+
+      - name: Build (preview env)
+        run: pnpm --filter web build
+
+      - name: Deploy preview Worker
+        id: deploy
+        run: |
+          set -euo pipefail
+          out="$(pnpm --filter web exec wrangler deploy 2>&1)"
+          echo "$out"
+          url="$(printf '%s\n' "$out" | grep -oiE 'https://[a-z0-9.-]+\.workers\.dev' | head -n1 || true)"
+          if [ -z "$url" ]; then
+            url="https://${PR_WORKER_NAME}.${WORKERS_DEV_SUBDOMAIN}.workers.dev"
+          fi
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      # A brand-new Worker has no secrets, so push the runtime ones it needs.
+      # All three are load-bearing (Clerk server auth + R2 presigning), so a
+      # missing one fails the deploy loudly rather than shipping a green preview
+      # whose auth or uploads silently 500. The `if: failure()` comment below
+      # then tells the author what to fix; the next push retries the same worker.
+      - name: Push runtime secrets to the PR Worker
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          put_secret() {
+            local name="$1" value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Required secret ${name} is missing from the 'preview' GitHub Environment. Add it under Settings → Environments → preview, then re-run."
+              return 1
+            fi
+            printf '%s' "$value" | pnpm --filter web exec wrangler secret put "$name" --name "$PR_WORKER_NAME"
+          }
+          put_secret CLERK_SECRET_KEY "${CLERK_SECRET_KEY:-}"
+          put_secret R2_ACCESS_KEY_ID "${R2_ACCESS_KEY_ID:-}"
+          put_secret R2_SECRET_ACCESS_KEY "${R2_SECRET_ACCESS_KEY:-}"
+
+      - name: Comment — ready
+        uses: ./.github/actions/preview-comment
+        with:
+          body: |
+            ### ✅ Preview ready
+
+            | | |
+            |---|---|
+            | **URL** | ${{ steps.deploy.outputs.url }} |
+            | **Worker** | `${{ env.PR_WORKER_NAME }}` |
+            | **Database** | `${{ env.PR_DB_NAME }}` (isolated) · R2 `lil-media-uploads-preview` (shared) |
+            | **Commit** | `${{ github.event.pull_request.head.sha }}` |
+
+            Auto-redeploys on every push. Torn down when this PR closes.
+
+      - name: Comment — failed
+        if: failure()
+        uses: ./.github/actions/preview-comment
+        with:
+          body: |
+            ### ❌ Preview deploy failed
+
+            The preview for commit `${{ github.event.pull_request.head.sha }}` didn't deploy.
+            See the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for logs.
+
+            It'll retry automatically on the next push.
+
+      # Close the race where the PR is closed WHILE this deploy is in flight.
+      # Closing fires `closed`, which the teardown workflow handles in a SEPARATE
+      # concurrency group — it does NOT cancel this run — so a deploy that
+      # finishes just after teardown deleted would re-create an orphaned Worker +
+      # D1 that outlive the closed PR. This step always runs at the end of the
+      # job, re-checks the PR state, and destroys what we just made if it's now
+      # closed/merged (then re-asserts the torn-down comment so the thread can't
+      # be left showing "✅ ready" for resources that no longer exist).
+      - name: Reconcile if PR closed during deploy
+        id: reconcile
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }} # gh CLI auth (pull-requests:write covers read)
+        run: |
+          set -euo pipefail
+          # Defaulted so an early failure (before identifiers were resolved)
+          # degrades to a no-op skip rather than an unbound-variable error.
+          state="$(gh pr view "${PR_NUMBER:-}" --repo "$GITHUB_REPOSITORY" --json state -q .state || echo UNKNOWN)"
+          echo "PR #${PR_NUMBER:-?} state: ${state}"
+          if [ "$state" = "CLOSED" ] || [ "$state" = "MERGED" ]; then
+            echo "PR is ${state} — self-tearing-down ${PR_WORKER_NAME} / ${PR_DB_NAME} to avoid an orphan."
+            bash scripts/preview/destroy-preview.sh
+            echo "reconciled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment — reconciled teardown
+        if: always() && steps.reconcile.outputs.reconciled == 'true'
+        uses: ./.github/actions/preview-comment
+        with:
+          body: |
+            ### 🧹 Preview environment torn down
+
+            This PR closed while its preview was still deploying, so the
+            freshly-created resources were removed to avoid an orphan.
+
+            | Resource | Status |
+            |---|---|
+            | Worker `${{ env.PR_WORKER_NAME }}` | ${{ steps.reconcile.outputs.worker_status }} |
+            | Database `${{ env.PR_DB_NAME }}` | ${{ steps.reconcile.outputs.db_status }} |
