@@ -8,12 +8,14 @@ describe("presignUpload", () => {
     const { key, uploadUrl } = await presignUpload("image/png")
     expect(key).toMatch(/^pending\/[0-9a-f-]{36}\.png$/)
     const url = new URL(uploadUrl)
-    // NOTE: aws4fetch with signQuery:true only signs `host`; content-type is NOT
-    // bound in the signature even though we pass it to sign(). R2 does not enforce
-    // a content-type match on presigned PUTs — the serve route (media/$key.ts) is
-    // the backstop. See PR notes for the content-type signing limitation.
+    // content-type is signed (aws4fetch needs allHeaders:true, since content-type
+    // is otherwise unsignable by default), so the browser's PUT must send a
+    // matching content type. R2's enforcement of signed headers is verified
+    // manually on preview; here we assert the signature covers content-type.
     expect(url.searchParams.get("X-Amz-Expires")).toBe("600")
-    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("host")
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toContain(
+      "content-type"
+    )
   })
 })
 

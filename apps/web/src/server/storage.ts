@@ -41,7 +41,7 @@ export async function presignUpload(contentType: string) {
       method: "PUT",
       headers: { "content-type": contentType },
     }),
-    { aws: { signQuery: true } }
+    { aws: { signQuery: true, allHeaders: true } }
   )
   return { key, uploadUrl: signed.url }
 }
