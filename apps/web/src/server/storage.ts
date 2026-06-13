@@ -35,9 +35,14 @@ export async function presignUpload(contentType: string) {
     `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET}/${key}`
   )
   url.searchParams.set("X-Amz-Expires", "600")
-  const signed = await s3Client().sign(new Request(url, { method: "PUT" }), {
-    aws: { signQuery: true },
-  })
+  // Sign the content type so the uploaded object must match what was requested.
+  const signed = await s3Client().sign(
+    new Request(url, {
+      method: "PUT",
+      headers: { "content-type": contentType },
+    }),
+    { aws: { signQuery: true } }
+  )
   return { key, uploadUrl: signed.url }
 }
 
